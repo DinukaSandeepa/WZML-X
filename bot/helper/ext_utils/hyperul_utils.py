@@ -9,20 +9,30 @@ try:
 except ImportError:
     FloodPremiumWait = FloodWait
 
+from time import time
 from os import path as ospath
-from aiofiles.os import path as aiopath, remove
+from aiofiles.os import makedirs, path as aiopath, remove
 
-from ... import LOGGER
+from ... import LOGGER, DOWNLOAD_DIR
 from ...core.config_manager import Config
 from ...core.tg_client import TgClient
 from ..telegram_helper.tg_transfer import HypertgTransfer
+from ..ext_utils.bot_utils import sync_to_async
 from ..ext_utils.media_utils import (
     get_audio_thumbnail,
     get_document_type,
     get_media_info,
     get_multiple_frames_thumbnail,
+    get_video_resolution,
     get_video_thumbnail,
 )
+
+
+def _scale_thumbnail(src, dst):
+    with Image.open(src) as img:
+        img = img.convert("RGB")
+        img.thumbnail((320, 320))
+        img.save(dst, "JPEG", quality=90)
 
 
 class HypertgUpload(HypertgTransfer):
@@ -70,6 +80,8 @@ class HypertgUpload(HypertgTransfer):
         height = 320
         artist = ""
         title = ""
+        orig_auto_thumb = None
+        scaled_thumb = None
 
         if (
             force_document
@@ -78,24 +90,62 @@ class HypertgUpload(HypertgTransfer):
         ):
             key = "documents"
             if is_video and thumb is None:
-                thumb = await get_video_thumbnail(file_path, None)
+                orig_auto_thumb = thumb = await get_video_thumbnail(file_path, None)
+            if thumb is not None and thumb != "none" and await aiopath.isfile(thumb):
+                d_thumb_dir = f"{DOWNLOAD_DIR}thumbnails"
+                await makedirs(d_thumb_dir, exist_ok=True)
+                scaled_thumb = ospath.join(d_thumb_dir, f"{time()}_dthumb.jpg")
+                try:
+                    await sync_to_async(_scale_thumbnail, thumb, scaled_thumb)
+                    thumb = scaled_thumb
+                except Exception as e:
+                    LOGGER.error(f"Failed to scale document thumbnail: {e}")
+                    scaled_thumb = None
         elif is_video:
             key = "videos"
             duration = (await get_media_info(file_path))[0]
+            v_w, v_h = await get_video_resolution(file_path)
+            if v_w and v_h:
+                width, height = v_w, v_h
+
             if thumb is None and self._listener.thumbnail_layout:
-                thumb = await get_multiple_frames_thumbnail(
+                orig_auto_thumb = thumb = await get_multiple_frames_thumbnail(
                     file_path,
                     self._listener.thumbnail_layout,
                     self._listener.screen_shots,
                 )
             if thumb is None:
-                thumb = await get_video_thumbnail(file_path, duration)
-            if thumb is not None and thumb != "none":
-                with Image.open(thumb) as img:
-                    width, height = img.size
+                orig_auto_thumb = thumb = await get_video_thumbnail(file_path, duration)
+
+            if thumb is not None and thumb != "none" and await aiopath.isfile(thumb):
+                v_thumb_dir = f"{DOWNLOAD_DIR}thumbnails"
+                await makedirs(v_thumb_dir, exist_ok=True)
+                scaled_thumb = ospath.join(v_thumb_dir, f"{time()}_vthumb.jpg")
+                try:
+                    await sync_to_async(_scale_thumbnail, thumb, scaled_thumb)
+                    thumb = scaled_thumb
+                except Exception as e:
+                    LOGGER.error(f"Failed to scale video thumbnail: {e}")
+                    scaled_thumb = None
+                    if not (v_w and v_h):
+                        try:
+                            with Image.open(thumb) as img:
+                                width, height = img.size
+                        except Exception:
+                            pass
         elif is_audio:
             key = "audios"
             duration, artist, title = await get_media_info(file_path)
+            if thumb is not None and thumb != "none" and await aiopath.isfile(thumb):
+                a_thumb_dir = f"{DOWNLOAD_DIR}thumbnails"
+                await makedirs(a_thumb_dir, exist_ok=True)
+                scaled_thumb = ospath.join(a_thumb_dir, f"{time()}_athumb.jpg")
+                try:
+                    await sync_to_async(_scale_thumbnail, thumb, scaled_thumb)
+                    thumb = scaled_thumb
+                except Exception as e:
+                    LOGGER.error(f"Failed to scale audio thumbnail: {e}")
+                    scaled_thumb = None
         else:
             key = "photos"
 
@@ -171,9 +221,14 @@ class HypertgUpload(HypertgTransfer):
             LOGGER.error(f"HypertgUL fail {self._up_file}: {type(e).__name__}: {e}")
             raise
         finally:
-            if user_thumb is None and thumb is not None and await aiopath.exists(thumb):
+            if scaled_thumb and await aiopath.exists(scaled_thumb):
                 try:
-                    await remove(thumb)
+                    await remove(scaled_thumb)
+                except Exception:
+                    pass
+            if user_thumb is None and orig_auto_thumb is not None and await aiopath.exists(orig_auto_thumb):
+                try:
+                    await remove(orig_auto_thumb)
                 except Exception:
                     pass
 
@@ -262,6 +317,9 @@ class HypertgUpload(HypertgTransfer):
                     kwargs["performer"] = artist
                 if title:
                     kwargs["title"] = title
+                if thumb:
+                    kwargs["thumb"] = thumb
+            else:
                 if thumb:
                     kwargs["thumb"] = thumb
 

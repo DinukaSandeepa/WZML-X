@@ -257,6 +257,18 @@ async def get_streams(file):
         return None
 
 
+async def get_video_resolution(file):
+    streams = await get_streams(file)
+    if streams:
+        for stream in streams:
+            if stream.get("codec_type") == "video":
+                width = int(stream.get("width", 0))
+                height = int(stream.get("height", 0))
+                if width and height:
+                    return width, height
+    return 0, 0
+
+
 async def take_ss(video_file, ss_nb) -> bool:
     duration = (await get_media_info(video_file))[0]
     if duration != 0:
