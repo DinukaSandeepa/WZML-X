@@ -1,7 +1,7 @@
 from asyncio import ensure_future, gather, sleep
 from logging import getLogger
 from os import path as ospath, walk
-from re import match as re_match, sub as re_sub
+from re import I, match as re_match, sub as re_sub
 from time import time
 
 from aioshutil import rmtree
@@ -130,7 +130,7 @@ class TelegramUploader:
         return True
 
     async def _prepare_file(self, pre_file_, dirpath):
-        cap_file_ = file_ = pre_file_
+        cap_file_ = file_ = re_sub(r"^www\..*? - ", "", pre_file_, count=1, flags=I)
         lprefix = self._lprefix
         lsuffix = self._lsuffix
         lcaption = self._lcaption
@@ -192,7 +192,10 @@ class TelegramUploader:
                 cap_mono,
             )
 
-        if len(file_) > 60:
+        if (
+            Config.TELEGRAM_FILENAME_LIMIT > 0
+            and len(file_) > Config.TELEGRAM_FILENAME_LIMIT
+        ):
             if is_archive(file_):
                 name = get_base_name(file_)
                 ext = file_.split(name, 1)[1]
@@ -207,7 +210,7 @@ class TelegramUploader:
                 ext = ""
             if lsuffix:
                 ext = f"{lsuffix}{ext}"
-            name = name[: 64 - len(ext)]
+            name = name[: max(0, Config.TELEGRAM_FILENAME_LIMIT - len(ext))]
             file_ = f"{name}{ext}"
         elif lsuffix:
             name, ext = ospath.splitext(file_)

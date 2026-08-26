@@ -95,6 +95,7 @@ class Config:
     LEECH_SUFFIX = ""
     LEECH_FONT = ""
     LEECH_SPLIT_SIZE = 2097152000
+    TELEGRAM_FILENAME_LIMIT = 60
     MEDIA_GROUP = False
     USE_HYPER = True
     HYPER_THREADS = 0

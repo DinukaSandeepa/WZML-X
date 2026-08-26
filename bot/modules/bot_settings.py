@@ -78,6 +78,7 @@ DEFAULT_VALUES = {
     "QUEUE_DOWNLOAD": 0,
     "QUEUE_UPLOAD": 0,
     "USER_MAX_TASKS": 0,
+    "TELEGRAM_FILENAME_LIMIT": 60,
 }
 
 BOOL_VARS = [
@@ -201,6 +202,7 @@ DEFAULT_DESP = {
     "LEECH_SUFFIX": "Suffix added to leeched file names.",
     "LEECH_FONT": "Font style for captions: b, i, u, s, code, spoiler.",
     "LEECH_SPLIT_SIZE": "Split size for Telegram uploads in bytes. Default: 2GB (4GB for premium).",
+    "TELEGRAM_FILENAME_LIMIT": "Maximum file name length for Telegram uploads. Truncates if exceeded. Default: 60.",
     "MEDIA_GROUP": "Upload split parts as media group. Default: False.",
     "USE_HYPER": "Enable HyperDL/HyperUP for faster Telegram transfers. Default: True.",
     "HYPER_THREADS": "Number of parallel download parts (clients). 0 = auto.",
